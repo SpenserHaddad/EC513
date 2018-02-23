@@ -1,3 +1,7 @@
+# Vim swap files
+*.swo
+*.swp
+
 # Lab output files
 results*
 output*
