@@ -40,7 +40,7 @@ if __name__ == '__main__':
 	result_path = Path(sys.argv[1])
 	if result_path.is_dir():
 		total_results = [0, 0, 0, 0]
-		for result_file in result_path.glob('**/*.txt.out'):
+		for result_file in result_path.glob('**/*.out'):
 			short_name = result_file.name.split('_')[0]
 			results = read_results_file(result_file)
 			print_results(results, short_name)
