@@ -46,9 +46,9 @@ class myBranchPredictor: public BranchPredictor {
 
 
   private:
-	const UINT64 table_bit_count = 8;
+	const UINT64 table_bit_count = 16;
 	UINT64 table_mask = 0;
-	BOOL history_table[256];
+	BOOL history_table[65536];
 
 
 };
