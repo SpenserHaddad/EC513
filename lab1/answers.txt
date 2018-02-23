@@ -1,0 +1,45 @@
+1. Given that the Fetch stage is the most cycle-intensive of the pipeline,
+Architecture A would be the more performant choice. First of all, Architecture B
+use stalling, which most likely means that replaces the instructions with bubble
+cycles that will lower the effective CPI of the architecture. Second, assuming that
+it doesn't have any mechanism to speed up the fetching of stalled instructions,
+Architecture B requires two fetches for every delayed instruction, one the first
+time the instruction is encountered and one when it fetches it after the stall.
+This means each of these instructions is using the most expensive stage twice
+per execution. If the cost is significantly higher than the cost of the other
+two stages, then it effectively doubles the CPI of each delayed instruction. This
+is a considerable performance hit that Architecture A avoids by keeping the
+pipeline dependencies within the cheaper Execute and Writeback stages. In addition,
+Architecture A does not use any bubble cycles, which will also improve the CPI
+compared to Architecture B.
+
+2.
+
+3. The biggest tradeoff to only using full register reads and writes happens when
+multiple partial registers in the same full register are written in successive
+instructions. When this happens, it will set the instruction count for measuring
+dependency spacing for all registers within the full register to that current
+instruction. For all other registers, the resulting dependency spacing when
+finally read will be lower than it actually is. As a result, our overall measurements
+will show the lower dependency spacings as being more frequent than they actuallya
+are.
+
+Interestingly, using partial register names instead of full register names does
+not seem to have any impact on data accuracy. The plots below compare the test
+suite being run treating partial registers as full registers and treating them
+as the actual partial register. As seen below, for each of the six tests in the
+test suites, the results appear similar to one another.
+
+
+4. Architecture A has more general purpose registers. Most of architecture B's
+weight is in dependency spacing 1, which implies that it has to write over
+registers more frequently than Architecture A, which means that it runs out of
+available registers faster, and that would be the case if it had less general
+purpose registers to begin with.
+
+By contrast, Architecture A's dependency graph is relatively more evenly
+distributed, which means its able to hold data in registers for longer. This means
+that it is not running out of registers to load data into as frequently as
+Architecture B. Granted, Architecture A still has mostly single-digit dependency
+distances, so it still is overwriting registers every few instructions, but
+it is doing so at a much lower rate than Architecture B.
