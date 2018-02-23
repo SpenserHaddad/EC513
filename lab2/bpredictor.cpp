@@ -10,6 +10,13 @@ static UINT64 takenIncorrect = 0;
 static UINT64 notTakenCorrect = 0;
 static UINT64 notTakenIncorrect = 0;
 
+enum PREDICTOR {
+	STRONGLY_NOT_TAKEN = 0,
+	WEAKLY_NOT_TAKEN,
+	WEAKLY_TAKEN,
+	STRONGLY_TAKEN
+};
+
 class BranchPredictor {
 
   public:
@@ -31,15 +38,42 @@ class myBranchPredictor: public BranchPredictor {
   BOOL makePrediction(ADDRINT address)
 	{
 		UINT64 table_index = address & this->table_mask;
-		if (this->history_table[table_index])
-			return TRUE; 
-		else
-			return FALSE;
+		switch (this->history_table[table_index]) {
+			case STRONGLY_TAKEN:
+			case WEAKLY_TAKEN:
+				return TRUE;
+			case WEAKLY_NOT_TAKEN:
+			case STRONGLY_NOT_TAKEN:
+				return FALSE;
+			default:
+				return TRUE;
+		}
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
 		UINT64 table_index = address & this->table_mask;
-		this->history_table[table_index] = takenActually;
+		switch (this->history_table[table_index]) {
+			case STRONGLY_TAKEN:
+				if (!takenActually)
+					this->history_table[table_index] = WEAKLY_TAKEN;
+				break;
+			case WEAKLY_TAKEN:
+				if (takenActually)
+					this->history_table[table_index] = STRONGLY_TAKEN;
+				else
+					this->history_table[table_index] = WEAKLY_NOT_TAKEN;
+				break;
+			case WEAKLY_NOT_TAKEN:
+				if (takenActually)
+					this->history_table[table_index] = WEAKLY_TAKEN;
+				else
+					this->history_table[table_index] = STRONGLY_NOT_TAKEN;
+				break;
+			case STRONGLY_NOT_TAKEN:
+				if (takenActually)
+					this->history_table[table_index] = WEAKLY_NOT_TAKEN;
+				break;
+		}
 	}
  
   void Finish() {};
@@ -48,7 +82,7 @@ class myBranchPredictor: public BranchPredictor {
   private:
 	const UINT64 table_bit_count = 16;
 	UINT64 table_mask = 0;
-	BOOL history_table[65536];
+	PREDICTOR history_table[65536];
 
 
 };
