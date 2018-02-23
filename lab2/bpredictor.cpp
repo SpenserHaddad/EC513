@@ -28,27 +28,13 @@ class myBranchPredictor: public BranchPredictor {
 
   BOOL makePrediction(ADDRINT address)
 	{
-		addresses.insert(address);
 		return TRUE; 
 	}
 
-  void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address){}
+  void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address){};
  
-  void Finish() {
-		ofstream outfile;
-		outfile.open("addresses.txt");
-		outfile.setf(ios::showbase);
-		for (std::set<ADDRINT>::iterator it=addresses.begin(); it != addresses.end(); ++it) {
-			outfile << *it << std::endl;
-		}
-		outfile.close();
-	}
-
-	private:
-	std::set<ADDRINT> addresses;
-	 
+  void Finish() {};
 };
-
 BranchPredictor* BP;
 
 
