@@ -24,16 +24,33 @@ class BranchPredictor {
 
 class myBranchPredictor: public BranchPredictor {
   public:
-  myBranchPredictor() {}
+  myBranchPredictor() {
+		this->table_mask = (1 << this->table_bit_count) - 1;
+	}
 
   BOOL makePrediction(ADDRINT address)
 	{
-		return TRUE; 
+		UINT64 table_index = address & this->table_mask;
+		if (this->history_table[table_index])
+			return TRUE; 
+		else
+			return FALSE;
 	}
 
-  void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address){};
+  void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
+		UINT64 table_index = address & this->table_mask;
+		this->history_table[table_index] = takenActually;
+	}
  
   void Finish() {};
+
+
+  private:
+	const UINT64 table_bit_count = 8;
+	UINT64 table_mask = 0;
+	BOOL history_table[256];
+
+
 };
 BranchPredictor* BP;
 
