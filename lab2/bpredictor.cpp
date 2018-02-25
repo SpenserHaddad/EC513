@@ -3,6 +3,9 @@
 #include <assert.h>
 #include <fstream> 
 #include <set>
+#include <sstream>
+#include <string>
+#include <bitset>
 #include "pin.H"
 
 static UINT64 takenCorrect = 0;
@@ -16,6 +19,21 @@ enum PREDICTOR {
 	WEAKLY_TAKEN,
 	STRONGLY_TAKEN
 };
+
+std::string predictor_to_string(PREDICTOR p) {
+	switch(p) {
+		case STRONGLY_NOT_TAKEN:
+			return "STRONGLY NOT TAKEN";
+		case WEAKLY_NOT_TAKEN:
+			return "WEAKLY NOT TAKEN";
+		case WEAKLY_TAKEN:
+			return "WEAKLY TAKEN";
+		case STRONGLY_TAKEN:
+			return "STRONGLY TAKEN";
+		default:
+			return "";
+	}
+}
 
 class BranchPredictor {
 
@@ -31,18 +49,20 @@ class BranchPredictor {
 
 class myBranchPredictor: public BranchPredictor {
   public:
-  myBranchPredictor() {
-		this->table_mask = (1 << this->table_bit_count) - 1;
-	}
+  myBranchPredictor() { }
 
   BOOL makePrediction(ADDRINT address)
 	{
-		UINT64 table_index = address & this->table_mask;
-		switch (this->history_table[table_index]) {
+		//this->debugStream << "Making prediction using " << std::bitset<8>(this->global_register_history) << std::endl;
+		PREDICTOR predictor = this->pattern_history_table[this->global_register_history]; 
+		//this->debugStream << "Prediction is: " << predictor_to_string(predictor) << std::endl;
+		switch (predictor) {
 			case STRONGLY_TAKEN:
+				return TRUE;
 			case WEAKLY_TAKEN:
 				return TRUE;
 			case WEAKLY_NOT_TAKEN:
+				return FALSE;
 			case STRONGLY_NOT_TAKEN:
 				return FALSE;
 			default:
@@ -51,38 +71,58 @@ class myBranchPredictor: public BranchPredictor {
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		UINT64 table_index = address & this->table_mask;
-		switch (this->history_table[table_index]) {
+	//this->debugStream << "Result was " << takenActually << ", we said " << takenPredicted << std::endl;
+
+		PREDICTOR old_predictor = this->pattern_history_table[this->global_register_history];
+		PREDICTOR new_predictor = WEAKLY_TAKEN;
+		switch (old_predictor) {
 			case STRONGLY_TAKEN:
 				if (!takenActually)
-					this->history_table[table_index] = WEAKLY_TAKEN;
+					new_predictor = WEAKLY_TAKEN;
 				break;
 			case WEAKLY_TAKEN:
 				if (takenActually)
-					this->history_table[table_index] = STRONGLY_TAKEN;
+					new_predictor = STRONGLY_TAKEN;
 				else
-					this->history_table[table_index] = WEAKLY_NOT_TAKEN;
+					new_predictor = WEAKLY_NOT_TAKEN;
 				break;
 			case WEAKLY_NOT_TAKEN:
 				if (takenActually)
-					this->history_table[table_index] = WEAKLY_TAKEN;
+					new_predictor = WEAKLY_TAKEN;
 				else
-					this->history_table[table_index] = STRONGLY_NOT_TAKEN;
+					new_predictor = STRONGLY_NOT_TAKEN;
 				break;
 			case STRONGLY_NOT_TAKEN:
 				if (takenActually)
-					this->history_table[table_index] = WEAKLY_NOT_TAKEN;
+					new_predictor = WEAKLY_NOT_TAKEN;
 				break;
 		}
+		//this->debugStream << "Updated prediction for " << std::bitset<8>(this->global_register_history) << " to " << predictor_to_string(new_predictor) << std::endl;
+		this->pattern_history_table[this->global_register_history] = new_predictor;
+		
+		this->global_register_history = (this->global_register_history << 1) | takenActually;
+/*		if (takenActually) {
+			this->global_register_history |= 1;
+		}*/
+		//this->debugStream << "New GHR is: " << std::bitset<8>(this->global_register_history) << std::endl;
+
 	}
  
-  void Finish() {};
+  void Finish() {
+		/*ofstream debugFile;
+  		debugFile.open("debug.log");
+		debugFile.setf(ios::showbase);
+
+		debugFile << "Take 2" << std::endl << this->debugStream.str();
+		debugFile.close();
+		*/
+	};
 
 
   private:
-	const UINT64 table_bit_count = 16;
-	UINT64 table_mask = 0;
-	PREDICTOR history_table[65536];
+	UINT8 global_register_history = 0;
+	PREDICTOR pattern_history_table[256] = { WEAKLY_TAKEN } ;
+	std::stringstream debugStream;
 
 
 };
@@ -91,6 +131,8 @@ BranchPredictor* BP;
 
 // This knob sets the output file name
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "result.out", "specify the output file name");
+
+KNOB<string> KnobDebugFile(KNOB_MODE_WRITEONCE, "pintool", "debug", "debug.log", "set the predictor's debug log");
 
 
 // In examining handle branch, refer to quesiton 1 on the homework
