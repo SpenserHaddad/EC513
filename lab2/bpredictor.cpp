@@ -20,6 +20,51 @@ enum PREDICTOR {
 	STRONGLY_TAKEN
 };
 
+
+BOOL get_prediction(const PREDICTOR &predictor) {
+	switch (predictor) {
+		case STRONGLY_TAKEN:
+			return TRUE;
+		case WEAKLY_TAKEN:
+			return TRUE;
+		case WEAKLY_NOT_TAKEN:
+			return FALSE;
+		case STRONGLY_NOT_TAKEN:
+			return FALSE;
+		default:
+			return TRUE;
+		}
+}
+
+
+PREDICTOR get_new_pred_state(const PREDICTOR &old_predictor, const BOOL &takenActually) {
+	PREDICTOR new_predictor = old_predictor;
+	
+	switch (old_predictor) {
+		case STRONGLY_TAKEN:
+			if (!takenActually)
+				new_predictor = WEAKLY_TAKEN;
+			break;
+		case WEAKLY_TAKEN:
+			if (takenActually)
+				new_predictor = STRONGLY_TAKEN;
+			else
+				new_predictor = WEAKLY_NOT_TAKEN;
+			break;
+		case WEAKLY_NOT_TAKEN:
+			if (takenActually)
+				new_predictor = WEAKLY_TAKEN;
+			else
+				new_predictor = STRONGLY_NOT_TAKEN;
+			break;
+		case STRONGLY_NOT_TAKEN:
+			if (takenActually)
+				new_predictor = WEAKLY_NOT_TAKEN;
+			break;
+		}
+	return new_predictor;
+}
+
 std::string predictor_to_string(PREDICTOR p) {
 	switch(p) {
 		case STRONGLY_NOT_TAKEN:
@@ -49,83 +94,57 @@ class BranchPredictor {
 
 class myBranchPredictor: public BranchPredictor {
   public:
-  myBranchPredictor() { }
+  myBranchPredictor() {
+	debugStream << "Init, table_mask = " << this->table_mask << std::endl;	
+	}
 
   BOOL makePrediction(ADDRINT address)
 	{
-		//this->debugStream << "Making prediction using " << std::bitset<8>(this->global_register_history) << std::endl;
-		PREDICTOR predictor = this->pattern_history_table[this->global_register_history]; 
-		//this->debugStream << "Prediction is: " << predictor_to_string(predictor) << std::endl;
-		switch (predictor) {
-			case STRONGLY_TAKEN:
-				return TRUE;
-			case WEAKLY_TAKEN:
-				return TRUE;
-			case WEAKLY_NOT_TAKEN:
-				return FALSE;
-			case STRONGLY_NOT_TAKEN:
-				return FALSE;
-			default:
-				return TRUE;
-		}
+		debugStream << "Making prediction for " << address << std::endl;
+		UINT16 table_index = address & this->table_mask;
+		UINT16 grh_entry = this->address_histories[table_index];
+		PREDICTOR predictor = this->pattern_history_table[grh_entry];
+/*
+		debugStream << "\ttable_index = " << table_index;
+		debugStream <<", grh_entry = " << std::bitset<8>(grh_entry);
+		debugStream <<", predictor = " << predictor_to_string(predictor);
+		debugStream << std::endl;
+*/
+		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-	//this->debugStream << "Result was " << takenActually << ", we said " << takenPredicted << std::endl;
-
-		PREDICTOR old_predictor = this->pattern_history_table[this->global_register_history];
-		PREDICTOR new_predictor = WEAKLY_TAKEN;
-		switch (old_predictor) {
-			case STRONGLY_TAKEN:
-				if (!takenActually)
-					new_predictor = WEAKLY_TAKEN;
-				break;
-			case WEAKLY_TAKEN:
-				if (takenActually)
-					new_predictor = STRONGLY_TAKEN;
-				else
-					new_predictor = WEAKLY_NOT_TAKEN;
-				break;
-			case WEAKLY_NOT_TAKEN:
-				if (takenActually)
-					new_predictor = WEAKLY_TAKEN;
-				else
-					new_predictor = STRONGLY_NOT_TAKEN;
-				break;
-			case STRONGLY_NOT_TAKEN:
-				if (takenActually)
-					new_predictor = WEAKLY_NOT_TAKEN;
-				break;
-		}
-		//this->debugStream << "Updated prediction for " << std::bitset<8>(this->global_register_history) << " to " << predictor_to_string(new_predictor) << std::endl;
-		this->pattern_history_table[this->global_register_history] = new_predictor;
+//		debugStream << "Updating for " << address << ", takenActually = " << takenActually << std::endl;
+	
+		UINT16 table_index = address & this->table_mask;
+		UINT16 grh_entry = this->address_histories[table_index];
+		PREDICTOR old_predictor = this->pattern_history_table[grh_entry];
 		
-		this->global_register_history = (this->global_register_history << 1) | takenActually;
-/*		if (takenActually) {
-			this->global_register_history |= 1;
-		}*/
-		//this->debugStream << "New GHR is: " << std::bitset<8>(this->global_register_history) << std::endl;
+		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
+//		debugStream << "\tUpdating predictor for table_index = " << table_index << ", grh_entry = " << std::bitset<8>(grh_entry) << " to " << predictor_to_string(new_predictor) << std::endl;
+		this->pattern_history_table[grh_entry] = new_predictor;
+		this->address_histories[table_index] = (grh_entry << 1) | takenActually;
 
+//		debugStream << "\tgrh_entry updated to " << this->address_histories[table_index] << std::endl;
 	}
  
   void Finish() {
-		/*ofstream debugFile;
+/*		ofstream debugFile;
   		debugFile.open("debug.log");
 		debugFile.setf(ios::showbase);
 
-		debugFile << "Take 2" << std::endl << this->debugStream.str();
+		debugFile << this->debugStream.str();
 		debugFile.close();
-		*/
-	};
+*/	};
 
 
   private:
-	UINT8 global_register_history = 0;
-	PREDICTOR pattern_history_table[256] = { WEAKLY_TAKEN } ;
+	UINT16 table_mask = 0x00FF;
+	UINT16 address_histories[255];
+	PREDICTOR pattern_history_table[65536] = { WEAKLY_TAKEN } ;
 	std::stringstream debugStream;
-
-
 };
+
 BranchPredictor* BP;
 
 
