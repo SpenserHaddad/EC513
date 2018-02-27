@@ -8,6 +8,10 @@
 #include <bitset>
 #include "pin.H"
 
+#define NUM_ADDRESS_TABLE_ENTRIES 64 
+#define NUM_PATTERN_HIST_TABLE_ENTRIES 256
+using ADDRESS_INDEX = UINT8;
+
 static UINT64 takenCorrect = 0;
 static UINT64 takenIncorrect = 0;
 static UINT64 notTakenCorrect = 0;
@@ -91,34 +95,36 @@ class BranchPredictor {
 };
 
 class myBranchPredictor: public BranchPredictor {
-  public:
-  myBranchPredictor() {}
+	public:
+	myBranchPredictor() {
+		address_index_mask = NUM_ADDRESS_TABLE_ENTRIES - 1;
+	}
 
-  BOOL makePrediction(ADDRINT address)
-	{
-		UINT8 table_index = (address & this->table_mask) & 0xFF;
-		UINT8 grh_entry = this->address_histories[table_index];
-		PREDICTOR predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
+	BOOL makePrediction(ADDRINT address) {
+		ADDRESS_INDEX address_index = (address & this->address_index_mask);
+		UINT8 grh_entry = this->address_branch_histories[address_index];
+		PREDICTOR predictor = (PREDICTOR)this->address_pattern_histories[address_index][grh_entry];
 		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		UINT8 table_index = address & this->table_mask;
-		UINT8 grh_entry = this->address_histories[table_index];
-		PREDICTOR old_predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
+		ADDRESS_INDEX address_index = address & this->address_index_mask;
+		UINT16 grh_entry = this->address_branch_histories[address_index];
+		PREDICTOR old_predictor = (PREDICTOR)this->address_pattern_histories[address_index][grh_entry];
 		
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		this->pattern_history_table[grh_entry] = new_predictor;
-		this->address_histories[table_index] = ((grh_entry << 1) | takenActually);
+		this->address_pattern_histories[address_index][grh_entry] = new_predictor;
+		this->address_branch_histories[address_index] = (grh_entry << 1) | takenActually;
 	}
  
   void Finish() {};
 
 
-  private:
-	UINT8 table_mask = 0xFF;
-	UINT8 address_histories[256];
-	UINT8 pattern_history_table[256] = { WEAKLY_TAKEN } ;
+	private:
+	ADDRESS_INDEX address_index_mask;
+
+	UINT8 address_branch_histories[NUM_ADDRESS_TABLE_ENTRIES];
+	UINT8 address_pattern_histories[NUM_ADDRESS_TABLE_ENTRIES][NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
 };
 
 BranchPredictor* BP;
