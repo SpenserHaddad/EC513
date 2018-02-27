@@ -92,83 +92,33 @@ class BranchPredictor {
 
 class myBranchPredictor: public BranchPredictor {
   public:
-  myBranchPredictor() {
-	debugStream << "Init, table_mask = " << (UINT16)this->table_mask << std::endl;	
-	debugFile.open("debug.log");
-	}
+  myBranchPredictor() {}
 
   BOOL makePrediction(ADDRINT address)
 	{
-		debugStream << "Making prediction for " << address << std::endl;
-		
 		UINT8 table_index = (address & this->table_mask) & 0xFF;
-		if (table_index >= 256) {
-			debugStream << "***WARNING: TABLE_INDEX***" << std::endl;
-			flush_debug_file();
-		}
-		debugStream << "\ttable_index = " << (UINT16)table_index;
-		
 		UINT8 grh_entry = this->address_histories[table_index];
-		if (grh_entry >= 256) {
-			debugStream << "***WARNING: GRH_ENTRY***" << std::endl;
-			flush_debug_file();
-		}
-		debugStream <<", grh_entry = " << std::bitset<8>(grh_entry);
-		
 		PREDICTOR predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
-		debugStream <<", predictor = " << predictor_to_string(predictor);
-		debugStream << std::endl;
-		//flush_debug_file();
 		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		debugStream << "Updating for " << address << ", takenActually = " << takenActually << std::endl;
-	
 		UINT8 table_index = address & this->table_mask;
-		if (table_index >= 256) {
-			debugStream << "***WARNING: TABLE_INDEX***" << std::endl;
-			flush_debug_file();
-		}
 		UINT8 grh_entry = this->address_histories[table_index];
-		if (grh_entry >= 256) {
-			debugStream << "***WARNING: GRH_ENTRY***" << std::endl;
-			flush_debug_file();
-		}
 		PREDICTOR old_predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
 		
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		debugStream << "\tUpdating predictor for table_index = " << (UINT16)table_index << ", grh_entry = " << std::bitset<8>(grh_entry) << " to " << predictor_to_string(new_predictor) << std::endl;
 		this->pattern_history_table[grh_entry] = new_predictor;
-		this->address_histories[table_index] = (grh_entry << 1) | takenActually;
-		
-		debugStream << "\tgrh_entry updated to " << std::bitset<8>(this->address_histories[table_index]) << std::endl;
-		flush_debug_file();
+		this->address_histories[table_index] = ((grh_entry << 1) | takenActually);
 	}
  
-  void Finish() {
-/*		ofstream debugFile;
-  		debugFile.open("debug.log");
-		debugFile.setf(ios::showbase);
-
-		debugFile << this->debugStream.str();
-*/		debugFile.close();
-	};
+  void Finish() {};
 
 
   private:
 	UINT8 table_mask = 0xFF;
 	UINT8 address_histories[256];
 	UINT8 pattern_history_table[256] = { WEAKLY_TAKEN } ;
-	std::stringstream debugStream;
-	ofstream debugFile;
-	
-	void flush_debug_file() {
-		debugFile << this->debugStream.str();
-		this->debugStream.str(std::string());
-		debugStream.clear();
-		debugFile.flush();
-	}
 };
 
 BranchPredictor* BP;
