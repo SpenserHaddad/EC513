@@ -24,11 +24,9 @@ enum PREDICTOR {
 BOOL get_prediction(const PREDICTOR &predictor) {
 	switch (predictor) {
 		case STRONGLY_TAKEN:
-			return TRUE;
 		case WEAKLY_TAKEN:
 			return TRUE;
 		case WEAKLY_NOT_TAKEN:
-			return FALSE;
 		case STRONGLY_NOT_TAKEN:
 			return FALSE;
 		default:
@@ -139,8 +137,8 @@ class myBranchPredictor: public BranchPredictor {
 
 
   private:
-	UINT16 table_mask = 0x00FF;
-	UINT16 address_histories[255];
+	UINT16 table_mask = 0xFFFF;
+	UINT16 address_histories[65536];
 	PREDICTOR pattern_history_table[65536] = { WEAKLY_TAKEN } ;
 	std::stringstream debugStream;
 };
