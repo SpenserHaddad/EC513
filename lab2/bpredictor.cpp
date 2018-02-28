@@ -94,9 +94,36 @@ class BranchPredictor {
   virtual void Finish() {};	
 };
 
-class myBranchPredictor: public BranchPredictor {
+
+class gsharePredictor: public BranchPredictor {
 	public:
-	myBranchPredictor() {
+	gsharePredictor() {}
+	
+	BOOL makePrediction(ADDRINT address) {
+		UINT16 predictor_index = (address ^ history_register) & mask;
+		return get_prediction((PREDICTOR)predictors[predictor_index]);
+	}
+
+	void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
+		UINT16 predictor_index = (address ^ history_register) & mask;
+		PREDICTOR old_predictor = (PREDICTOR)predictors[predictor_index];
+		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
+		predictors[predictor_index] = (UINT8)new_predictor;
+
+		history_register = (history_register << 1) & takenActually;
+	}
+
+
+	private:
+	UINT16 history_register;
+	UINT8 predictors[4096] = { WEAKLY_TAKEN};
+	UINT16 mask = 0x7FF;
+};
+
+
+class twoLevelAdaptivePredictor: public BranchPredictor {
+	public:
+	twoLevelAdaptivePredictor() {
 		address_index_mask = NUM_ADDRESS_TABLE_ENTRIES - 1;
 	}
 
@@ -125,6 +152,45 @@ class myBranchPredictor: public BranchPredictor {
 
 	UINT8 address_branch_histories[NUM_ADDRESS_TABLE_ENTRIES];
 	UINT8 address_pattern_histories[NUM_ADDRESS_TABLE_ENTRIES][NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
+};
+
+
+class myBranchPredictor: public BranchPredictor {
+	public:
+	myBranchPredictor() {
+		bp1 = new gsharePredictor;
+		bp2 = new twoLevelAdaptivePredictor;
+	}
+
+	BOOL makePrediction(ADDRINT address) {
+		if (selector <=1)
+			return bp1->makePrediction(address);
+		else
+			return bp2->makePrediction(address);
+	}
+
+	void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
+		bp1->makeUpdate(takenActually, takenPredicted, address);		
+		bp2->makeUpdate(takenActually, takenPredicted, address);
+
+		if (takenPredicted == takenActually) {
+			if (selector == 1)
+				selector = 0;
+			else if (selector == 2)
+				selector = 3;
+		} else {
+			if (selector <= 1)
+				selector++;
+			else
+				selector--;
+		}
+	}
+
+	private:
+		BranchPredictor* bp1;
+		BranchPredictor* bp2;
+		UINT8 selector = 1; // 0-1, choose bp1. 2-3, choose bp2
+
 };
 
 BranchPredictor* BP;
