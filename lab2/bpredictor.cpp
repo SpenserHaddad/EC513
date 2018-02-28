@@ -1,21 +1,23 @@
 #include <iostream>
 #include <stdio.h>
 #include <assert.h>
-#include <fstream> 
+#include <fstream>
 #include <set>
 #include <sstream>
 #include <string>
 #include <bitset>
 #include "pin.H"
 
-#define NUM_ADDRESS_TABLE_ENTRIES 512 
-#define NUM_PATTERN_HIST_TABLE_ENTRIES 512 
+#define NUM_ADDRESS_TABLE_ENTRIES 512
+#define NUM_PATTERN_HIST_TABLE_ENTRIES 512
 
 static UINT64 takenCorrect = 0;
 static UINT64 takenIncorrect = 0;
 static UINT64 notTakenCorrect = 0;
 static UINT64 notTakenIncorrect = 0;
 
+
+// Defines the states for a two-bit saturating predictor
 enum PREDICTOR {
 	STRONGLY_NOT_TAKEN = 0,
 	WEAKLY_NOT_TAKEN,
@@ -23,7 +25,7 @@ enum PREDICTOR {
 	STRONGLY_TAKEN
 };
 
-
+// Returns a two-bit saturating predictor's prediction
 BOOL get_prediction(const PREDICTOR &predictor) {
 	switch (predictor) {
 		case STRONGLY_TAKEN:
@@ -37,10 +39,10 @@ BOOL get_prediction(const PREDICTOR &predictor) {
 		}
 }
 
-
+// Returns a new predictor based off the result of the old one's prediction
 PREDICTOR get_new_pred_state(const PREDICTOR &old_predictor, const BOOL &takenActually) {
 	PREDICTOR new_predictor = old_predictor;
-	
+
 	switch (old_predictor) {
 		case STRONGLY_TAKEN:
 			if (!takenActually)
@@ -74,34 +76,35 @@ class BranchPredictor {
   virtual BOOL makePrediction(ADDRINT address) { return FALSE;};
 
   virtual void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {};
-  
-  virtual void Finish() {};	
-};
 
+  virtual void Finish() {};
+};
 
 class gsharePredictor: public BranchPredictor {
 	public:
 	gsharePredictor() {}
-	
+
 	BOOL makePrediction(ADDRINT address) {
 		UINT16 predictor_index = (address ^ history_register) & mask;
 		return get_prediction((PREDICTOR)predictors[predictor_index]);
 	}
 
 	void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
+		// Update the counter
 		UINT16 predictor_index = (address ^ history_register) & mask;
 		PREDICTOR old_predictor = (PREDICTOR)predictors[predictor_index];
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
 		predictors[predictor_index] = (UINT8)new_predictor;
 
+		// Update the history register
 		history_register = (history_register << 1) & takenActually;
 	}
 
 
 	private:
-	UINT16 history_register;
+	UINT16 history_register; // 16-bit (global) history register
 	UINT8 predictors[4096] = { WEAKLY_TAKEN};
-	UINT16 mask = 0x7FF;
+	UINT16 mask = 0x7FF; // Masks UINT16s so they fit into the predictor's array range
 };
 
 
@@ -113,9 +116,10 @@ class twoLevelAdaptivePredictor: public BranchPredictor {
 	}
 
 	BOOL makePrediction(ADDRINT address) {
+		// Find the indices of the branch's history, and its predictor
 		UINT16 address_index = address & address_index_mask;
 		UINT8 grh_entry = address_branch_histories[address_index] & history_index_mask;
-		PREDICTOR predictor = (PREDICTOR)address_pattern_histories[grh_entry];
+		PREDICTOR predictor = (PREDICTOR)branch_pattern_selectors[grh_entry];
 		return get_prediction(predictor);
 	}
 
@@ -123,25 +127,30 @@ class twoLevelAdaptivePredictor: public BranchPredictor {
 		UINT16 address_index = address & address_index_mask;
 		UINT16 grh_entry = address_branch_histories[address_index];
 		UINT16 grh_index = grh_entry & history_index_mask;
-		PREDICTOR old_predictor = (PREDICTOR)address_pattern_histories[grh_index];
-		
+
+		// Update the predictor for this history
+		PREDICTOR old_predictor = (PREDICTOR)branch_pattern_selectors[grh_index];
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		address_pattern_histories[grh_index] = new_predictor;
+		branch_pattern_selectors[grh_index] = new_predictor;
+
+		// Update the history for this address
 		address_branch_histories[address_index] = (grh_entry << 1) | takenActually;
 	}
- 
+
   void Finish() {};
 
-
 	private:
+	// Masks that ensure the indices never go outside the bounds of their arrays
 	UINT16 address_index_mask;
 	UINT16 history_index_mask;
 
+	// The arrays for the address-specific branch histories, and the (global)
+	// saturating predictors (use UINT8 instead of PREDICTOR to save on memory)
 	UINT8 address_branch_histories[NUM_ADDRESS_TABLE_ENTRIES];
-	UINT8 address_pattern_histories[NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
+	UINT8 branch_pattern_selectors[NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
 };
 
-
+// Combining predictor: Chooses between two different predictors for flexibility
 class myBranchPredictor: public BranchPredictor {
 	public:
 	myBranchPredictor() {
@@ -157,9 +166,11 @@ class myBranchPredictor: public BranchPredictor {
 	}
 
 	void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		bp1->makeUpdate(takenActually, takenPredicted, address);		
+		// Update the individual predictors (even if they weren't used)
+		bp1->makeUpdate(takenActually, takenPredicted, address);
 		bp2->makeUpdate(takenActually, takenPredicted, address);
 
+		// Update our selector
 		if (takenPredicted == takenActually) {
 			if (selector == 1)
 				selector = 0;
@@ -176,8 +187,10 @@ class myBranchPredictor: public BranchPredictor {
 	private:
 		BranchPredictor* bp1;
 		BranchPredictor* bp2;
+		// Two bit saturating counter that chooses which predictor to use.
+		// 0-1, choose bp1
+		// 2-3, choose bp2
 		UINT8 selector = 1; // 0-1, choose bp1. 2-3, choose bp2
-
 };
 
 BranchPredictor* BP;
@@ -194,7 +207,7 @@ void handleBranch(ADDRINT ip, BOOL direction)
 {
   BOOL prediction = BP->makePrediction(ip);
   BP->makeUpdate(direction, prediction, ip);
-  
+
   if(prediction) {
     if(direction) {
       takenCorrect++;
@@ -214,14 +227,14 @@ void handleBranch(ADDRINT ip, BOOL direction)
 
 
 void instrumentBranch(INS ins, void * v)
-{   
+{
   if(INS_IsBranch(ins) && INS_HasFallThrough(ins)) {
     INS_InsertCall(
       ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)handleBranch,
       IARG_INST_PTR,
       IARG_BOOL,
       TRUE,
-      IARG_END); 
+      IARG_END);
 
     INS_InsertCall(
       ins, IPOINT_AFTER, (AFUNPTR)handleBranch,
@@ -231,13 +244,13 @@ void instrumentBranch(INS ins, void * v)
       IARG_END);
   }
 }
- 
+
 
 /* ===================================================================== */
 VOID Fini(int, VOID * v)
-{   
+{
   BP->Finish();
-  ofstream outfile;	
+  ofstream outfile;
   outfile.open(KnobOutputFile.Value().c_str());
   outfile.setf(ios::showbase);
   outfile << "takenCorrect: "<< takenCorrect <<"  takenIncorrect: "<< takenIncorrect <<" notTakenCorrect: "<< notTakenCorrect <<" notTakenIncorrect: "<< notTakenIncorrect <<"\n";
@@ -259,10 +272,10 @@ int main(int argc, char * argv[])
 
     // Register Fini to be called when the application exits
     PIN_AddFiniFunction(Fini, 0);
-    
+
     // Start the program, never returns
     PIN_StartProgram();
-    
+
     return 0;
 }
 
