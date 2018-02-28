@@ -96,19 +96,20 @@ class myBranchPredictor: public BranchPredictor {
 
   BOOL makePrediction(ADDRINT address)
 	{
-		UINT8 table_index = (address & this->table_mask) & 0xFF;
-		UINT8 grh_entry = this->address_histories[table_index];
+		UINT16 table_index = (address & this->table_mask);
+		UINT16 grh_entry = this->address_histories[table_index] & this->table_mask;
 		PREDICTOR predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
 		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		UINT8 table_index = address & this->table_mask;
-		UINT8 grh_entry = this->address_histories[table_index];
-		PREDICTOR old_predictor = (PREDICTOR)this->pattern_history_table[grh_entry];
+		UINT16 table_index = address & this->table_mask;
+		UINT16 grh_entry = this->address_histories[table_index];
+		UINT16 grh_index = grh_entry & this->table_mask;
+		PREDICTOR old_predictor = (PREDICTOR)this->pattern_history_table[grh_index];
 		
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		this->pattern_history_table[grh_entry] = new_predictor;
+		this->pattern_history_table[grh_index] = new_predictor;
 		this->address_histories[table_index] = ((grh_entry << 1) | takenActually);
 	}
  
@@ -116,9 +117,9 @@ class myBranchPredictor: public BranchPredictor {
 
 
   private:
-	UINT8 table_mask = 0xFF;
-	UINT8 address_histories[256];
-	UINT8 pattern_history_table[256] = { WEAKLY_TAKEN } ;
+	UINT16 table_mask = 0x1FF;
+	UINT16 address_histories[512];
+	UINT8 pattern_history_table[512] = { WEAKLY_TAKEN } ;
 };
 
 BranchPredictor* BP;
