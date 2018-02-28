@@ -100,10 +100,9 @@ class gsharePredictor: public BranchPredictor {
 		history_register = (history_register << 1) & takenActually;
 	}
 
-
 	private:
 	UINT16 history_register; // 16-bit (global) history register
-	UINT8 predictors[4096] = { WEAKLY_TAKEN};
+	UINT8 predictors[2048] = { WEAKLY_TAKEN };
 	UINT16 mask = 0x7FF; // Masks UINT16s so they fit into the predictor's array range
 };
 
