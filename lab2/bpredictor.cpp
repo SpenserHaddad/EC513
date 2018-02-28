@@ -95,29 +95,24 @@ class myBranchPredictor: public BranchPredictor {
 	myBranchPredictor() {}
 
 	BOOL makePrediction(ADDRINT address) {
-		UINT16 address_index = address & mask;
-		UINT16 history_register = history_registers[address_index];
-		UINT8 predictor_index = (address ^ history_register) & mask;
+		UINT16 predictor_index = (address ^ history_register) & mask;
 		return get_prediction((PREDICTOR)predictors[predictor_index]);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		UINT16 address_index = address & mask;
-		UINT16 history_register = history_registers[address_index];
-		UINT8 predictor_index = (address ^ history_register) & mask;
+		UINT16 predictor_index = (address ^ history_register) & mask;
 		PREDICTOR old_predictor = (PREDICTOR)predictors[predictor_index];
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
 		predictors[predictor_index] = (UINT8)new_predictor;
 
 		history_register = (history_register << 1) & takenActually;
-		history_registers[address_index] = history_register;
 	}
  
   void Finish() {};
 
 
 	private:
-	UINT8 history_registers[4096] = { 0 };;
+	UINT16 history_register;
 	UINT8 predictors[4096] = { WEAKLY_TAKEN };
 	UINT16 mask = 0x7FF;
 };
