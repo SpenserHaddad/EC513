@@ -8,9 +8,8 @@
 #include <bitset>
 #include "pin.H"
 
-#define NUM_ADDRESS_TABLE_ENTRIES 64 
-#define NUM_PATTERN_HIST_TABLE_ENTRIES 256
-using ADDRESS_INDEX = UINT8;
+#define NUM_ADDRESS_TABLE_ENTRIES 512 
+#define NUM_PATTERN_HIST_TABLE_ENTRIES 512 
 
 static UINT64 takenCorrect = 0;
 static UINT64 takenIncorrect = 0;
@@ -125,22 +124,24 @@ class twoLevelAdaptivePredictor: public BranchPredictor {
 	public:
 	twoLevelAdaptivePredictor() {
 		address_index_mask = NUM_ADDRESS_TABLE_ENTRIES - 1;
+		history_index_mask = NUM_PATTERN_HIST_TABLE_ENTRIES - 1;
 	}
 
 	BOOL makePrediction(ADDRINT address) {
-		ADDRESS_INDEX address_index = (address & this->address_index_mask);
-		UINT8 grh_entry = this->address_branch_histories[address_index];
-		PREDICTOR predictor = (PREDICTOR)this->address_pattern_histories[address_index][grh_entry];
+		UINT16 address_index = address & this->address_index_mask;
+		UINT8 grh_entry = this->address_branch_histories[address_index] & this->history_index_mask;
+		PREDICTOR predictor = (PREDICTOR)this->address_pattern_histories[grh_entry];
 		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		ADDRESS_INDEX address_index = address & this->address_index_mask;
+		UINT16 address_index = address & this->address_index_mask;
 		UINT16 grh_entry = this->address_branch_histories[address_index];
-		PREDICTOR old_predictor = (PREDICTOR)this->address_pattern_histories[address_index][grh_entry];
+		UINT16 grh_index = grh_entry & this->history_index_mask;
+		PREDICTOR old_predictor = (PREDICTOR)this->address_pattern_histories[grh_index];
 		
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		this->address_pattern_histories[address_index][grh_entry] = new_predictor;
+		this->address_pattern_histories[grh_index] = new_predictor;
 		this->address_branch_histories[address_index] = (grh_entry << 1) | takenActually;
 	}
  
@@ -148,10 +149,11 @@ class twoLevelAdaptivePredictor: public BranchPredictor {
 
 
 	private:
-	ADDRESS_INDEX address_index_mask;
+	UINT16 address_index_mask;
+	UINT16 history_index_mask;
 
 	UINT8 address_branch_histories[NUM_ADDRESS_TABLE_ENTRIES];
-	UINT8 address_pattern_histories[NUM_ADDRESS_TABLE_ENTRIES][NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
+	UINT8 address_pattern_histories[NUM_PATTERN_HIST_TABLE_ENTRIES] = { WEAKLY_TAKEN } ;
 };
 
 
