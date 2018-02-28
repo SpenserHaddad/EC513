@@ -66,21 +66,6 @@ PREDICTOR get_new_pred_state(const PREDICTOR &old_predictor, const BOOL &takenAc
 	return new_predictor;
 }
 
-std::string predictor_to_string(PREDICTOR p) {
-	switch(p) {
-		case STRONGLY_NOT_TAKEN:
-			return "STRONGLY NOT TAKEN";
-		case WEAKLY_NOT_TAKEN:
-			return "WEAKLY NOT TAKEN";
-		case WEAKLY_TAKEN:
-			return "WEAKLY TAKEN";
-		case STRONGLY_TAKEN:
-			return "STRONGLY TAKEN";
-		default:
-			return "";
-	}
-}
-
 class BranchPredictor {
 
   public:
@@ -128,21 +113,21 @@ class twoLevelAdaptivePredictor: public BranchPredictor {
 	}
 
 	BOOL makePrediction(ADDRINT address) {
-		UINT16 address_index = address & this->address_index_mask;
-		UINT8 grh_entry = this->address_branch_histories[address_index] & this->history_index_mask;
-		PREDICTOR predictor = (PREDICTOR)this->address_pattern_histories[grh_entry];
+		UINT16 address_index = address & address_index_mask;
+		UINT8 grh_entry = address_branch_histories[address_index] & history_index_mask;
+		PREDICTOR predictor = (PREDICTOR)address_pattern_histories[grh_entry];
 		return get_prediction(predictor);
 	}
 
   void makeUpdate(BOOL takenActually, BOOL takenPredicted, ADDRINT address) {
-		UINT16 address_index = address & this->address_index_mask;
-		UINT16 grh_entry = this->address_branch_histories[address_index];
-		UINT16 grh_index = grh_entry & this->history_index_mask;
-		PREDICTOR old_predictor = (PREDICTOR)this->address_pattern_histories[grh_index];
+		UINT16 address_index = address & address_index_mask;
+		UINT16 grh_entry = address_branch_histories[address_index];
+		UINT16 grh_index = grh_entry & history_index_mask;
+		PREDICTOR old_predictor = (PREDICTOR)address_pattern_histories[grh_index];
 		
 		PREDICTOR new_predictor = get_new_pred_state(old_predictor, takenActually);
-		this->address_pattern_histories[grh_index] = new_predictor;
-		this->address_branch_histories[address_index] = (grh_entry << 1) | takenActually;
+		address_pattern_histories[grh_index] = new_predictor;
+		address_branch_histories[address_index] = (grh_entry << 1) | takenActually;
 	}
  
   void Finish() {};
