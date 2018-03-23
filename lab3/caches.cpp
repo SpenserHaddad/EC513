@@ -57,10 +57,14 @@ class CacheModel
         }
 
         //Call this function to update the cache state whenever data is read
-        virtual void readReq(UINT32 virtualAddr) = 0;
+        virtual void readReq(UINT32 virtualAddr) {
+			readReqs++;
+		}
 
         //Call this function to update the cache state whenever data is written
-        virtual void writeReq(UINT32 virtualAddr) = 0;
+        virtual void writeReq(UINT32 virtualAddr) {
+			writeReqs++;
+		} 
 
         //Do not modify this function
         void dumpResults(ofstream *outfile)
@@ -83,10 +87,14 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 
         void readReq(UINT32 virtualAddr)
         {
+			CacheModel::readReq(virtualAddr);
+			UINT32 physicalAddr = (UINT32) getPhysicalPageNumber(virtualAddr);
         }
 
         void writeReq(UINT32 virtualAddr)
         {
+			CacheModel::writeReq(virtualAddr);
+			UINT32 physicalAddr = (UINT32) getPhysicalPageNumbert(virtualAddr);
         }
 };
 
