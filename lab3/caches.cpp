@@ -3,7 +3,11 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
+#include <stdlib.h>
+#include <time.h>
 #include "pin.H"
+#include <sstream>
+#include <iomanip>
 
 UINT32 logPageSize;
 UINT32 logPhysicalMemSize;
@@ -18,8 +22,40 @@ UINT64 getPhysicalPageNumber(UINT64 virtualPageNumber)
     key = key ^ (key >> 4);
     key = key * 2057; // key = (key + (key << 3)) + (key << 11);
     key = key ^ (key >> 16);
-    return (UINT32) (key&(((UINT32)(~0))>>(32-logPhysicalMemSize)));
+	
+    return (key&(((UINT32)(~0))>>(32-logPhysicalMemSize)));
+    //return (UINT32) (key&(((UINT32)(~0))>>(32-logPhysicalMemSize)));
 }
+
+/*
+class CacheSet
+{
+	private:
+		UINT32 associativity;
+		UINT32* blocks;
+		std::vector<UINT32> blocks;	
+		UINT32 replace_index;
+
+	public:
+		CacheSet(UINT32 associativity) 
+		{
+			this->associativity = associativity;
+			blocks = new UINT32*[associativity];
+		}
+
+		void Insert(UINT32 address) 
+		{
+			blocks[replace_index] = address;
+			replace_index = (replace_index + 1) % associativity;
+		}
+
+
+		bool TryGet(UINT32 address)
+		{
+			return std::find(blocks.begin(), blocks.end(), address) == blocks.end();
+		}
+}
+*/
 
 class CacheModel
 {
@@ -34,6 +70,8 @@ class CacheModel
         UINT32** tag;
         bool**   validBit;
 
+		UINT32 index_mask;
+
     public:
         //Constructor for a cache
         CacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
@@ -45,6 +83,8 @@ class CacheModel
             writeReqs = 0;
             readHits = 0;
             writeHits = 0;
+			
+			index_mask = (1u << logBlockSize) - 1;
             tag = new UINT32*[1u<<logNumRows];
             validBit = new bool*[1u<<logNumRows];
             for(UINT32 i = 0; i < 1u<<logNumRows; i++)
@@ -67,10 +107,11 @@ class CacheModel
 		} 
 
         //Do not modify this function
-        void dumpResults(ofstream *outfile)
+        virtual void dumpResults(ofstream *outfile)
         {
         	*outfile << readReqs <<","<< writeReqs <<","<< readHits <<","<< writeHits <<"\n";
         }
+
 };
 
 CacheModel* cachePP;
@@ -79,23 +120,100 @@ CacheModel* cacheVV;
 
 class LruPhysIndexPhysTagCacheModel: public CacheModel
 {
+
+	private:
+		UINT32** sets;
+		UINT32 index_mask;
+		UINT32 tag_shift_bits;
+		UINT32 tag_mask;
+		std::stringstream log;
     public:
         LruPhysIndexPhysTagCacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
+			log << std::hex;
+			log << "logNumRows=" << logNumRows << ", logBlockSize=" << logBlockSize << std::endl;
+			index_mask = (1u << logNumRows) - 1;
+			tag_shift_bits = logNumRows + logBlockSize;
+			tag_mask = (1 << (32 - tag_shift_bits)) - 1;
+			log << "tag_shift_bits=" << tag_shift_bits << ", tag_mask=" << tag_mask << std::endl;
         }
 
         void readReq(UINT32 virtualAddr)
         {
 			CacheModel::readReq(virtualAddr);
-			UINT32 physicalAddr = (UINT32) getPhysicalPageNumber(virtualAddr);
+			UINT64 physicalAddr = getPhysicalPageNumber(virtualAddr);
+			//UINT32 set_index = physicalAddr % associativity;
+			//UINT32 block_index = physicalAddr & index_mask;
+			
+			// We don't actually care about the block size since we assume
+			// it's just zeroed out. Shift right to get rid of it and make
+			// finding the index easier.
+			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
+			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;  
+
+			log << "Read request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
+			    << ", row=" << row << ", tag=" << address_tag  << std::endl;
+			for (UINT32 i = 0; i < associativity; i++) {
+				if (validBit[row][i] && 
+					tag[row][i] == address_tag) {
+					// We have a match! Nothing else to do but 
+					// update the hit count
+					log << "\tRead hit at row=" << row <<" set=" << i << std::endl;
+					readHits++;
+					return;
+				}
+			}
+
+			// If we get here then there was a cache miss.
+			// Update the cache
+			UINT32 replace_index = rand() % associativity;
+			log << "\tNo read hit, inserting into set=" << replace_index << std::endl;
+			validBit[row][replace_index] = true;
+			tag[row][replace_index] = address_tag;
         }
 
         void writeReq(UINT32 virtualAddr)
         {
 			CacheModel::writeReq(virtualAddr);
-			UINT32 physicalAddr = (UINT32) getPhysicalPageNumbert(virtualAddr);
+			UINT64 physicalAddr = getPhysicalPageNumber(virtualAddr);
+			
+			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
+			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
+
+			log << "Write request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
+			    << ", row=" << row << ", tag=" << address_tag  << std::endl;
+			for (UINT32 i = 0; i < associativity; i++) {
+				if (validBit[row][i] &&
+					tag[row][i] == address_tag) {
+					// Found a match, done
+					log << "\tWrite hit at row=" << row <<" set=" << i << std::endl;
+					writeHits++;
+					return;
+				}
+			}
+
+			// Have a cache miss, load address into cache
+			UINT32 replace_index = rand() % associativity;
+			log << "\tNo write hit, inserting into set=" << replace_index << std::endl;
+			validBit[row][replace_index] = true;
+			tag[row][replace_index] = address_tag;
         }
+
+		void dumpResults(ofstream *outfile) {
+			
+    		ofstream logfile;
+		    logfile.open("reads.log");
+			logfile.setf(ios::showbase);
+			logfile << log.rdbuf();
+			logfile.close();
+			CacheModel::dumpResults(outfile);
+		}
+
+
+	private:
+		std::vector<UINT64> readAddresses;
+		std::vector<UINT64> writeAddresses;
 };
 
 class LruVirIndexPhysTagCacheModel: public CacheModel
@@ -108,10 +226,12 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
 
         void readReq(UINT32 virtualAddr)
         {
+			CacheModel::readReq(virtualAddr);
         }
 
         void writeReq(UINT32 virtualAddr)
         {
+			CacheModel::writeReq(virtualAddr);
         }
 };
 
@@ -125,10 +245,12 @@ class LruVirIndexVirTagCacheModel: public CacheModel
 
         void readReq(UINT32 virtualAddr)
         {
+			CacheModel::readReq(virtualAddr);
         }
 
         void writeReq(UINT32 virtualAddr)
         {
+			CacheModel::writeReq(virtualAddr);
         }
 };
 
@@ -198,11 +320,20 @@ VOID Fini(INT32 code, VOID *v)
      outfile << "virtual index virtual tag: ";
     cacheVV->dumpResults(&outfile);
     outfile.close();
+
+	ofstream rfile, wfile;
+	rfile.open("read_addresses.txt");
+	wfile.open("write_addresses.txt");
+	rfile.close();
+	wfile.close();
 }
 
 // argc, argv are the entire command line, including pin -t <toolname> -- ...
 int main(int argc, char * argv[])
 {
+	// Initialize random seed
+	srand(time(NULL));
+
     // Initialize pin
     PIN_Init(argc, argv);
 	
