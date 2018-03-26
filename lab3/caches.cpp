@@ -96,6 +96,25 @@ class CacheModel
         }
 
 	protected:
+
+		bool search_cache(UINT32 row, UINT32 address_tag) 
+		{
+			for (UINT32 i = 0; i < associativity; i++)
+			{
+				if (validBit[row][i] && tag[row][i] == address_tag)
+				{
+					update_lru_history(row, i);
+					return true;
+				}
+			}
+
+			UINT32 replace_index = get_lru_replacement_index(row);
+			validBit[row][replace_index] = true;
+			tag[row][replace_index] = address_tag;
+			update_lru_history(row, replace_index);
+			return false;
+		}
+
 		void update_lru_history(UINT32 row, UINT32 accessed_index)
 		{
 			UINT32 new_head = lru_history[row][accessed_index];
@@ -139,7 +158,6 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 
         void readReq(UINT32 virtualAddr)
         {
-			CacheModel::readReq(virtualAddr);
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
 			
 			// We don't actually care about the block size since we assume
@@ -148,6 +166,12 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;  
 
+			bool success = search_cache(row, address_tag);
+			if (success)
+				readHits++;
+			readReqs++;
+
+/*
 		//	std::cout << "Read request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
 		//	    << ", row=" << row << ", tag=" << address_tag  << std::endl;
 			for (UINT32 i = 0; i < associativity; i++) {
@@ -166,16 +190,22 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			validBit[row][replace_index] = true;
 			tag[row][replace_index] = address_tag;
 			update_lru_history(row, replace_index);
+			*/
         }
 
         void writeReq(UINT32 virtualAddr)
         {
-			CacheModel::writeReq(virtualAddr);
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
 			
 			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
+			bool success = search_cache(row, address_tag);
+			if (success)
+				writeHits++;
+			writeReqs++;
+
+			/*
 			//log << "Write request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
 			  //<< ", row=" << row << ", tag=" << address_tag  << std::endl;
 			for (UINT32 i = 0; i < associativity; i++) {
@@ -195,6 +225,7 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			validBit[row][replace_index] = true;
 			tag[row][replace_index] = address_tag;
 			update_lru_history(row, replace_index);
+			*/
         }
 
 		void dumpResults(ofstream *outfile) {
@@ -224,11 +255,50 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
         void readReq(UINT32 virtualAddr)
         {
 			CacheModel::readReq(virtualAddr);
+			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
+			
+			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
+			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
+
+			for (UINT32 i = 0; i < associativity; i++)
+			{
+				if (validBit[row][i] && tag[row][i] == address_tag) 
+				{
+					update_lru_history(row, i);
+					readHits++;
+					return;
+				}
+			}
+			
+			UINT32 replace_index = get_lru_replacement_index(row);
+			validBit[row][replace_index] = true;
+			tag[row][replace_index] = address_tag;
+			update_lru_history(row, replace_index);
         }
 
         void writeReq(UINT32 virtualAddr)
         {
 			CacheModel::writeReq(virtualAddr);
+			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
+
+			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
+			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
+
+
+			for (UINT32 i = 0; i < associativity; i++) 
+			{
+				if (validBit[row][i] && tag[row][i] == address_tag)
+				{
+					update_lru_history(row, i);
+					writeHits++;
+					return;
+				}
+			}
+			
+			UINT32 replace_index = get_lru_replacement_index(row);
+			validBit[row][replace_index] = true;
+			tag[row][replace_index] = address_tag;
+			update_lru_history(row, replace_index);
         }
 };
 
