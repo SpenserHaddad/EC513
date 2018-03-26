@@ -4,10 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
-#include <time.h>
 #include "pin.H"
-#include <sstream>
-#include <iomanip>
 
 UINT32 logPageSize;
 UINT32 logPhysicalMemSize;
@@ -80,14 +77,10 @@ class CacheModel
         }
 
         //Call this function to update the cache state whenever data is read
-        virtual void readReq(UINT32 virtualAddr) {
-			readReqs++;
-		}
+        virtual void readReq(UINT32 virtualAddr) {}
 
         //Call this function to update the cache state whenever data is written
-        virtual void writeReq(UINT32 virtualAddr) {
-			writeReqs++;
-		} 
+        virtual void writeReq(UINT32 virtualAddr) {}
 
         //Do not modify this function
         virtual void dumpResults(ofstream *outfile)
@@ -138,22 +131,14 @@ CacheModel* cacheVV;
 
 class LruPhysIndexPhysTagCacheModel: public CacheModel
 {
-	private:
-		std::stringstream log;
-		bool flag;
     public:
         LruPhysIndexPhysTagCacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
 			// Create bitmasks for accessing the index and tag of an address
-			flag = false;
 			index_mask = (1u << logNumRows) - 1;
 			tag_shift_bits = logNumRows + logBlockSize;
 			tag_mask = (1u << (32 - tag_shift_bits)) - 1;
-
-			//log << std::hex;
-			//log << "logNumRows=" << logNumRows << ", logBlockSize=" << logBlockSize << std::endl;
-			//log << "tag_shift_bits=" << tag_shift_bits << ", tag_mask=" << tag_mask << std::endl;
         }
 
         void readReq(UINT32 virtualAddr)
@@ -166,31 +151,10 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;  
 
-			bool success = search_cache(row, address_tag);
+			bool success = CacheModel::search_cache(row, address_tag);
 			if (success)
 				readHits++;
 			readReqs++;
-
-/*
-		//	std::cout << "Read request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
-		//	    << ", row=" << row << ", tag=" << address_tag  << std::endl;
-			for (UINT32 i = 0; i < associativity; i++) {
-				if (validBit[row][i] && tag[row][i] == address_tag) {
-					// We have a match! Update the lru history and the hit count 
-		//		    std::cout << "\tRead hit at row=" << row <<" set=" << i << std::endl;
-					update_lru_history(row, i);
-					readHits++;
-					return;
-				}
-			}
-
-			// If we get here then there was a cache miss. Update the cache
-			UINT32 replace_index = get_lru_replacement_index(row); 
-		//	std::cout << "\tNo read hit, inserting into set=" << replace_index << std::endl;
-			validBit[row][replace_index] = true;
-			tag[row][replace_index] = address_tag;
-			update_lru_history(row, replace_index);
-			*/
         }
 
         void writeReq(UINT32 virtualAddr)
@@ -200,44 +164,21 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
-			bool success = search_cache(row, address_tag);
+			bool success = CacheModel::search_cache(row, address_tag);
 			if (success)
 				writeHits++;
 			writeReqs++;
-
-			/*
-			//log << "Write request for VIR=" << virtualAddr << ", PHY=" << physicalAddr
-			  //<< ", row=" << row << ", tag=" << address_tag  << std::endl;
-			for (UINT32 i = 0; i < associativity; i++) {
-				if (validBit[row][i] &&
-					tag[row][i] == address_tag) {
-					// Found a match, done
-				//	log << "\tWrite hit at row=" << row <<" set=" << i << std::endl;
-					update_lru_history(row, i);
-					writeHits++;
-					return;
-				}
-			}
-
-			// Have a cache miss, load address into cache
-			UINT32 replace_index = get_lru_replacement_index(row); 
-			//std::cout << "\tNo write hit, inserting into set=" << replace_index << std::endl;
-			validBit[row][replace_index] = true;
-			tag[row][replace_index] = address_tag;
-			update_lru_history(row, replace_index);
-			*/
         }
 
-		void dumpResults(ofstream *outfile) {
-			
+		/*void dumpResults(ofstream *outfile) {
     		ofstream logfile;
 		    logfile.open("reads.log");
 			logfile.setf(ios::showbase);
 			logfile << log.rdbuf();
 			logfile.close();
-			
 			CacheModel::dumpResults(outfile);
 		}
+	*/
 };
 
 class LruVirIndexPhysTagCacheModel: public CacheModel
@@ -247,59 +188,33 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
 			index_mask = (1u << logNumRows) -1;
-
 			tag_shift_bits = logNumRows + logBlockSize;
 			tag_mask = (1u << (32 - tag_shift_bits)) - 1;	
         }
 
         void readReq(UINT32 virtualAddr)
         {
-			CacheModel::readReq(virtualAddr);
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-			
 			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
-			for (UINT32 i = 0; i < associativity; i++)
-			{
-				if (validBit[row][i] && tag[row][i] == address_tag) 
-				{
-					update_lru_history(row, i);
-					readHits++;
-					return;
-				}
-			}
-			
-			UINT32 replace_index = get_lru_replacement_index(row);
-			validBit[row][replace_index] = true;
-			tag[row][replace_index] = address_tag;
-			update_lru_history(row, replace_index);
+			bool success = CacheModel::search_cache(row, address_tag);
+			if (success)
+				readHits++;
+			readReqs++;
         }
 
         void writeReq(UINT32 virtualAddr)
         {
-			CacheModel::writeReq(virtualAddr);
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-
 			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
-
-			for (UINT32 i = 0; i < associativity; i++) 
-			{
-				if (validBit[row][i] && tag[row][i] == address_tag)
-				{
-					update_lru_history(row, i);
-					writeHits++;
-					return;
-				}
-			}
-			
-			UINT32 replace_index = get_lru_replacement_index(row);
-			validBit[row][replace_index] = true;
-			tag[row][replace_index] = address_tag;
-			update_lru_history(row, replace_index);
-        }
+			bool success = CacheModel::search_cache(row, address_tag);
+			if (success)
+				writeHits++;
+			writeReqs++;
+		}
 };
 
 class LruVirIndexVirTagCacheModel: public CacheModel
@@ -387,12 +302,6 @@ VOID Fini(INT32 code, VOID *v)
      outfile << "virtual index virtual tag: ";
     cacheVV->dumpResults(&outfile);
     outfile.close();
-
-	ofstream rfile, wfile;
-	rfile.open("read_addresses.txt");
-	wfile.open("write_addresses.txt");
-	rfile.close();
-	wfile.close();
 }
 
 // argc, argv are the entire command line, including pin -t <toolname> -- ...
