@@ -29,15 +29,15 @@ def print_results(results, title):
 	
 		name_str = f'\t{name}:'.ljust(30)
 		read_stats = f'Read={r_hit}/{r_cnt} ({r_miss_rate:0.3f}%)'.ljust(35)
-		write_stats = f'Write={w_hit}/{w_cnt} ({w_miss_rate:0.3f})%'.ljust(35)
+		write_stats = f'Write={w_hit}/{w_cnt} ({w_miss_rate:0.3f}%)'.ljust(35)
 		total_stats = f'Total={total_rate:0.3f}%'
 		print(f'{name_str}{read_stats}{write_stats}{total_stats}')
 
 
 if __name__ == '__main__':
 	if len(sys.argv) == 1:
-		results = read_results_file('result.out')
-		print_results(results, 'result.out')
+		results = load_results('results.out')
+		print_results(results, 'results.out')
 		sys.exit()
 
 	result_path = Path(sys.argv[1])
