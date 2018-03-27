@@ -40,11 +40,15 @@ class CacheModel
 		// find the least recentely used set for eviction/replacement.
 		UINT32** lru_history;
 
-		// # of bits to right shift address to put tag in lower bits
+		// The following values are model-dependant 
+
+		// number of bits to right shift address to move index and tag bits to
+		// the lower bits.
+		UINT32 index_shift_bits;
 		UINT32 tag_shift_bits;
 		
-		// Bitmasks for accessing the index and tag of an address.
-		// Need to be calculated in each model's constructor.
+		// Bitmasks for accessing the index and tag of an address, after shifting 
+		// the relevant section to the least significant bits.
 		UINT32 tag_mask;
 		UINT32 index_mask;
 
@@ -136,6 +140,7 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
 			// Create bitmasks for accessing the index and tag of an address
+			index_shift_bits = logBlockSize;
 			index_mask = (1u << logNumRows) - 1;
 			tag_shift_bits = logNumRows + logBlockSize;
 			tag_mask = (1u << (32 - tag_shift_bits)) - 1;
@@ -148,7 +153,7 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 			// We don't actually care about the block size since we assume
 			// it's just zeroed out. Shift right to get rid of it and make
 			// finding the index easier.
-			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
+			UINT32 row = (physicalAddr >> index_shift_bits) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;  
 
 			bool success = CacheModel::search_cache(row, address_tag);
@@ -161,7 +166,7 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
         {
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
 			
-			UINT32 row = (physicalAddr >> logBlockSize) & index_mask;
+			UINT32 row = (physicalAddr >> index_shift_bits) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
 			bool success = CacheModel::search_cache(row, address_tag);
@@ -169,16 +174,6 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 				writeHits++;
 			writeReqs++;
         }
-
-		/*void dumpResults(ofstream *outfile) {
-    		ofstream logfile;
-		    logfile.open("reads.log");
-			logfile.setf(ios::showbase);
-			logfile << log.rdbuf();
-			logfile.close();
-			CacheModel::dumpResults(outfile);
-		}
-	*/
 };
 
 class LruVirIndexPhysTagCacheModel: public CacheModel
@@ -187,6 +182,7 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
         LruVirIndexPhysTagCacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
+			index_shift_bits = logBlockSize + logPageSize;
 			index_mask = (1u << logNumRows) -1;
 			tag_shift_bits = logNumRows + logBlockSize;
 			tag_mask = (1u << (32 - tag_shift_bits)) - 1;	
@@ -195,7 +191,7 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
         void readReq(UINT32 virtualAddr)
         {
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
+			UINT32 row = (virtualAddr >> index_shift_bits) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
 			bool success = CacheModel::search_cache(row, address_tag);
@@ -207,7 +203,7 @@ class LruVirIndexPhysTagCacheModel: public CacheModel
         void writeReq(UINT32 virtualAddr)
         {
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-			UINT32 row = (virtualAddr >> logBlockSize) & index_mask;
+			UINT32 row = (virtualAddr >> index_shift_bits) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;
 
 			bool success = CacheModel::search_cache(row, address_tag);
@@ -223,16 +219,32 @@ class LruVirIndexVirTagCacheModel: public CacheModel
         LruVirIndexVirTagCacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
+			index_shift_bits = logBlockSize + logPageSize;
+			index_mask = (1u << logNumRows) - 1;
+			tag_shift_bits = logNumRows + logBlockSize;
+			tag_mask = (1u << (32 - tag_shift_bits)) - 1;
         }
 
         void readReq(UINT32 virtualAddr)
         {
-			CacheModel::readReq(virtualAddr);
+			UINT32 row = (virtualAddr >> index_shift_bits) & index_mask;
+			UINT32 address_tag = (virtualAddr >> tag_shift_bits) & tag_mask;
+
+			bool success = CacheModel::search_cache(row, address_tag);
+			if (success)
+				readHits++;
+			readReqs++;
         }
 
         void writeReq(UINT32 virtualAddr)
         {
-			CacheModel::writeReq(virtualAddr);
+			UINT32 row = (virtualAddr >> index_shift_bits) & index_mask;
+			UINT32 address_tag = (virtualAddr >> tag_shift_bits) & tag_mask;
+
+			bool success = CacheModel::search_cache(row, address_tag);
+			if (success)
+				writeHits++;
+			writeReqs++;
         }
 };
 
