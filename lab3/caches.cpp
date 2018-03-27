@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
-#include <stdlib.h>
 #include "pin.H"
 
 UINT32 logPageSize;
@@ -93,18 +92,25 @@ class CacheModel
         }
 
 	protected:
-
+		
+		// Traverses the cache at the given row for the tag.
+		// Returns true if it finds the tag (aka cache hit).
+		// Updates the cache structure after every search
 		bool search_cache(UINT32 row, UINT32 address_tag) 
 		{
 			for (UINT32 i = 0; i < associativity; i++)
 			{
 				if (validBit[row][i] && tag[row][i] == address_tag)
 				{
+					// Found the address in the cache, update access history
+					// and finish.
 					update_lru_history(row, i);
 					return true;
 				}
 			}
 
+			// Cache miss, "load" the value into the cache and 
+			// update the lru history.
 			UINT32 replace_index = get_lru_replacement_index(row);
 			validBit[row][replace_index] = true;
 			tag[row][replace_index] = address_tag;
@@ -112,9 +118,11 @@ class CacheModel
 			return false;
 		}
 
+		// Moves the accessed history to the bottom of the lru stack.
 		void update_lru_history(UINT32 row, UINT32 accessed_index)
 		{
 			UINT32 new_head = lru_history[row][accessed_index];
+			// Move the rest of the history down first first.
 			for (UINT32 i = accessed_index; i > 0; i--) 
 			{
 				lru_history[row][i] = lru_history[row][i-1];
@@ -122,11 +130,12 @@ class CacheModel
 			lru_history[row][0] = new_head;
 		}
 
+		// Get the index of the least recently used element in the
+		// cache row.
 		UINT32 get_lru_replacement_index(UINT32 row) 
 		{
 			 return lru_history[row][associativity-1];
-		} 	
-
+		}
 };
 
 CacheModel* cachePP;
@@ -139,7 +148,8 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
         LruPhysIndexPhysTagCacheModel(UINT32 logNumRowsParam, UINT32 logBlockSizeParam, UINT32 associativityParam)
             : CacheModel(logNumRowsParam, logBlockSizeParam, associativityParam)
         {
-			// Create bitmasks for accessing the index and tag of an address
+			// Create bitmasks and shift constants for accessing 
+			// the index and tag of an address.
 			index_shift_bits = logBlockSize;
 			index_mask = (1u << logNumRows) - 1;
 			tag_shift_bits = logNumRows + logBlockSize;
@@ -148,11 +158,8 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
 
         void readReq(UINT32 virtualAddr)
         {
+			// Find the row and tag, then pass to the base class to search the cache.
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-			
-			// We don't actually care about the block size since we assume
-			// it's just zeroed out. Shift right to get rid of it and make
-			// finding the index easier.
 			UINT32 row = (physicalAddr >> index_shift_bits) & index_mask;
 			UINT32 address_tag = (physicalAddr >> tag_shift_bits) & tag_mask;  
 
@@ -319,9 +326,6 @@ VOID Fini(INT32 code, VOID *v)
 // argc, argv are the entire command line, including pin -t <toolname> -- ...
 int main(int argc, char * argv[])
 {
-	// Initialize random seed
-	srand(time(NULL));
-
     // Initialize pin
     PIN_Init(argc, argv);
 	
