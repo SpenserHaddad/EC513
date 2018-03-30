@@ -36,7 +36,7 @@ class Simulation:
         return f'Simulation("{self.dir}")'
 
 
-sim_root = Path(r'C:\Users\sahko\Downloads\simulations')
+sim_root = Path(r'D:\Documents\school\EC513\EC513\lab3\simulations')
 simulations = [Simulation(sim_dir) for sim_dir in sim_root.iterdir()]
 
 # Get the PARSEC program names. All simulations have the same names
@@ -58,6 +58,10 @@ def plot_simulation(x, simulations, xlabel=None, ylabel=None, title=None):
 
 
 if __name__ == '__main__':
+    plots_path = Path('plots')
+    if not plots_path.exists():
+        plots_path.mkdir()
+
     # Find results for PIPT based on associativity. Keep other params as default
     assoc_simulations = [s for s in simulations if
                          s.log_num_rows == 9 and s.log_block_size == 2]
@@ -65,7 +69,7 @@ if __name__ == '__main__':
     assoc_fig = plot_simulation(assoc_points, assoc_simulations,
                                 'Cache Associativity', 'Miss Rate',
                                 'Cache miss rate vs. Associativity (Rows=512, Block Size=4 bytes)')
-    assoc_fig.savefig(r'plots\associativity.png')
+    assoc_fig.savefig(plots_path / 'associativity.png')
 
     # Find results for PIPT based on rows.
     row_simulations = [s for s in simulations
@@ -74,7 +78,7 @@ if __name__ == '__main__':
     row_fig = plot_simulation(row_points, row_simulations,
                               'Number of Cache Rows', 'Miss Rate',
                               'Cache miss rate vs. Rows (Block Size=4 bytes, Associativity=1)')
-    row_fig.savefig(r'plots\rows.png')
+    row_fig.savefig(plots_path / 'rows.png')
 
     # Find results for PIPT based on cache block size.
     block_simulations = [s for s in simulations
@@ -83,16 +87,25 @@ if __name__ == '__main__':
     block_fig = plot_simulation(block_points, block_simulations,
                                 'Cache Row Block Size (bytes)', 'Miss Rate',
                                 'Cache miss rate vs. Block Size (Rows=512, Associativity=1)')
-    block_fig.savefig(r'plots\block_size.png')
+    block_fig.savefig(plots_path / 'block_size.png')
 
     # Compare different cache models
     display_opts = [(9, 2, 1), (9, 2, 4),
                     (12, 2, 1), (12, 4, 4),
                     (9, 4, 1), (9, 4, 4), (16, 7, 7)]
-    data = {}
-    o = display_opts[0]
-    s = next(s for s in simulations if s.params == o)
-    pipt_avg = sum(r.PIPT for r in s.runs.values()) / len(s.runs)
-    vipt_avg = sum(r.VIPT for r in s.runs.values()) / len(s.runs)
-    vivt_avg = sum(r.VIVT for r in s.runs.values()) / len(s.runs)
-    print(pipt_avg, vipt_avg, vivt_avg)
+
+    # Print out a table of the data
+    opts_string = ''.join(f'{o}'.ljust(25) for o in display_opts)
+    pipt_avgs = []
+    vipt_avgs = []
+    vivt_avgs = []
+    for o in display_opts:
+        s = next(s for s in simulations if s.params == o)
+        pipt_avgs.append(sum(r.PIPT for r in s.runs.values()) / len(s.runs))
+        vipt_avgs.append(sum(r.VIPT for r in s.runs.values()) / len(s.runs))
+        vivt_avgs.append(sum(r.VIVT for r in s.runs.values()) / len(s.runs))
+
+    print('Model:'.ljust(25), opts_string, sep='')
+    print('PIPT'.ljust(25), ''.join(f'{a}'.ljust(25) for a in pipt_avgs), sep='')
+    print('VIPT'.ljust(25), ''.join(f'{a}'.ljust(25) for a in vipt_avgs), sep='')
+    print('VIVT'.ljust(25), ''.join(f'{a}'.ljust(25) for a in vivt_avgs), sep='')
