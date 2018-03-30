@@ -9,10 +9,10 @@ static UINT64 alignedMemoryAccesses = 0;
 static UINT64 unalignedMemoryAccesses = 0;
 
 //Cache analysis routine
-void cacheStore(UINT32 virtualAddr)
+void addressAnalysis(UINT32 virtualAddr)
 {
     // Check if memory alignment ends with b'00
-    if (virtualAddr & 3 == 0)
+    if ((virtualAddr & 3) == 0)
         alignedMemoryAccesses++;
     else
         unalignedMemoryAccesses++;
@@ -25,9 +25,16 @@ KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool",
 // Pin calls this function every time a new instruction is encountered
 VOID Instruction(INS ins, VOID *v)
 {
-    if(INS_IsMemoryRead(ins) || INS_IsMemoryWrite(ins))
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)addressAnalysis, IARG_MEMORYWRITE_EA, IARG_END);
+    if(INS_IsMemoryRead(ins))
+	{
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)addressAnalysis, IARG_MEMORYREAD_EA, IARG_END);
+	}
+	if(INS_IsMemoryWrite(ins))
+	{
+		INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)addressAnalysis, IARG_MEMORYWRITE_EA, IARG_END);
+	}
 }
+
 
 // This function is called when the application exits
 VOID Fini(INT32 code, VOID *v)
@@ -35,8 +42,8 @@ VOID Fini(INT32 code, VOID *v)
     ofstream outfile;
     outfile.open(KnobOutputFile.Value().c_str());
     outfile.setf(ios::showbase);
-    outfile << "aligned memory accesses: " << alignedMemoryAccesses;
-    outfile << "unaligned memory accesses: " << unalignedMemoryAccesses;
+    outfile << "aligned memory accesses: " << alignedMemoryAccesses << std::endl;
+    outfile << "unaligned memory accesses: " << unalignedMemoryAccesses << std::endl;
 
     outfile.close();
 }
