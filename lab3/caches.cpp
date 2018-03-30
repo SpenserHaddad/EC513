@@ -150,7 +150,7 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
         {
 			// Create bitmasks and shift constants for accessing 
 			// the index and tag of an address.
-			indexShiftBits = logBlockSize;
+			indexShiftBits = logBlockSize + logPageSize;
 			indexMask = (1u << logNumRows) - 1;
 			tagShiftBits = logNumRows + logBlockSize;
 			tagMask = (1u << (32 - tagShiftBits)) - 1;
@@ -160,7 +160,8 @@ class LruPhysIndexPhysTagCacheModel: public CacheModel
         {
 			// Find the row and tag, then pass to the base class to search the cache.
 			UINT32 physicalAddr = getPhysicalPageNumber(virtualAddr);
-			UINT32 row = (physicalAddr >> indexShiftBits) & indexMask;
+			// The virtual addresses index bits are the same as the physical address.
+			UINT32 row = (virtualAddr >> indexShiftBits) & indexMask;
 			UINT32 addressTag = (physicalAddr >> tagShiftBits) & tagMask;  
 
 			bool success = CacheModel::searchCache(row, addressTag);
